@@ -33,6 +33,7 @@ Mientras escuchás música en Spotify, tu perfil de Discord muestra el verso que
 ```
 
 - 🎶 **Letra sincronizada** con el segundo exacto de la canción
+- 💿 **Portada del álbum** y **barra de progreso** real del tema
 - 🖱️ **Ventana simple**: pegás tu ID, tocás **Prender** y listo
 - 👥 **Visible en la lista de miembros** del server (opcional)
 - ⏸️ **Se oculta sola** cuando pausás o cerrás Spotify
@@ -74,6 +75,7 @@ Abrí **LetrasRPC.exe**, pegá el ID y tocá **▶ Prender**. Con Discord y Spot
 | Opción | Qué hace |
 |---|---|
 | **Sincronía de la letra** | Si la letra va atrasada, subilo (`+0.5`, `+1`…). Si va adelantada, bajalo. Se aplica en vivo. |
+| **Mostrar la portada del álbum** | Usa la tapa del disco como imagen de la actividad. Si no la encuentra, muestra el ícono de Letras RPC. |
 | **Mostrar la letra en la lista de miembros** | En la lista del server se ve *"Escuchando «la letra»"* en vez del nombre de la app. |
 | **Prender automáticamente al abrir** | No hace falta tocar **Prender** cada vez. |
 | **Abrir con Windows** | Arranca minimizado y ya prendido al encender la PC. |
@@ -89,11 +91,12 @@ flowchart LR
     A[🎵 Spotify] -->|tema y segundo actual| B[🪟 Controles multimedia de Windows]
     B --> C[🎤 Letras RPC]
     D[📜 LRCLIB] -->|letra sincronizada| C
+    F[💿 iTunes / Deezer] -->|portada del álbum| C
     C -->|Rich Presence oficial<br/>máx. 1 cambio cada 5 s| E[💬 Tu perfil de Discord]
 ```
 
 1. **Lee Spotify desde Windows.** Usa los mismos controles multimedia que aparecen al subir el volumen, así que no hace falta login ni API de Spotify.
-2. **Busca la letra en [LRCLIB](https://lrclib.net).** Es una base de datos gratuita y abierta de letras con marcas de tiempo.
+2. **Busca la letra en [LRCLIB](https://lrclib.net)** y **la portada en iTunes o Deezer.** Las dos búsquedas son gratuitas y no piden clave.
 3. **Actualiza tu Rich Presence.** Se conecta al Discord que tenés abierto por la vía oficial (IPC local), usando tu propia aplicación.
 
 ---
@@ -147,6 +150,12 @@ Copiá de nuevo el **Application ID** desde *General Information*. Es un número
 <summary><b>Dice "Spotify en pausa o cerrado" pero estoy escuchando</b></summary>
 
 Tiene que ser la **app de escritorio de Spotify**, no el reproductor web.
+</details>
+
+<details>
+<summary><b>No aparece la portada, o aparece otra</b></summary>
+
+La portada se busca por nombre de canción y artista en iTunes, y si no está, en Deezer. Solo se usa si el artista coincide, para no mostrar tapas equivocadas. Si no la encuentra, se ve el ícono de Letras RPC. También la podés desactivar desde las opciones.
 </details>
 
 <details>
@@ -216,6 +225,7 @@ letras-rpc/
 ## 🙌 Créditos
 
 - 📜 Letras: **[LRCLIB](https://lrclib.net)**, base de letras sincronizadas libre y gratuita
+- 💿 Portadas: **[iTunes Search API](https://performance-partners.apple.com/search-api)** y **[Deezer API](https://developers.deezer.com/api)**
 - 🔌 Conexión con Discord: **[pypresence](https://github.com/qwertyquerty/pypresence)**
 - 🪟 Lectura del reproductor: **[PyWinRT](https://github.com/pywinrt/pywinrt)**
 

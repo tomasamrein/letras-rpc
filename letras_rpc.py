@@ -20,12 +20,13 @@ import re
 import sys
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 
 import requests
 from pypresence import ActivityType, Presence, StatusDisplayType
 
-__version__ = "1.2.0"
+__version__ = "1.3.0"
 
 # ---------------- VALORES POR DEFECTO ----------------
 MIN_SEGUNDOS_ENTRE_UPDATES = 5  # Discord permite ~5 cambios cada 20 s. Nunca menos de 5.
@@ -35,12 +36,15 @@ CONFIG_POR_DEFECTO = {
     "client_id": "",
     "offset": 0.0,               # positivo = letra más adelantada, negativo = más atrasada
     "lista_miembros": True,      # True: en la lista de miembros se ve "Escuchando <letra>"
+    "portada": True,             # True: muestra la portada del álbum como imagen
 }
 # -----------------------------------------------------
 
 LRC_LINE = re.compile(r"\[(\d+):(\d+(?:\.\d+)?)\]\s*(.*)")
 USER_AGENT = f"LetrasRPC/{__version__} (https://github.com/tomasamrein/letras-rpc)"
 SIN_LINEA = "♪ ♪"  # Discord exige al menos 2 caracteres en details/state
+ICONO_URL = "https://raw.githubusercontent.com/tomasamrein/letras-rpc/main/assets/icono.png"
+MAX_URL_IMAGEN = 256  # Discord no acepta URLs de imagen más largas
 
 
 # ---------------------------------------------------------------- letras
@@ -93,6 +97,64 @@ def buscar_letra(titulo, artista, duracion):
     return None
 
 
+# ---------------------------------------------------------------- portadas
+
+def _normalizar(texto):
+    return re.sub(r"[^a-z0-9]", "", (texto or "").lower())
+
+
+def _coincide(a, b):
+    a, b = _normalizar(a), _normalizar(b)
+    return bool(a and b) and (a in b or b in a)
+
+
+def _portada_itunes(titulo, artista):
+    r = requests.get(
+        "https://itunes.apple.com/search",
+        params={"term": f"{artista} {titulo}", "entity": "song", "limit": 5},
+        headers={"User-Agent": USER_AGENT},
+        timeout=6,
+    )
+    if r.status_code != 200:
+        return None
+    resultados = r.json().get("results", [])
+    # Preferir el resultado del mismo artista; si no hay, ninguno (evita portadas equivocadas)
+    for item in resultados:
+        url = item.get("artworkUrl100")
+        if url and _coincide(item.get("artistName"), artista):
+            return url.replace("100x100bb", "512x512bb")
+    return None
+
+
+def _portada_deezer(titulo, artista):
+    r = requests.get(
+        "https://api.deezer.com/search",
+        params={"q": f'artist:"{artista}" track:"{titulo}"', "limit": 5},
+        headers={"User-Agent": USER_AGENT},
+        timeout=6,
+    )
+    if r.status_code != 200:
+        return None
+    for item in r.json().get("data", []) or []:
+        album = item.get("album") or {}
+        url = album.get("cover_xl") or album.get("cover_big")
+        if url and _coincide((item.get("artist") or {}).get("name"), artista):
+            return url
+    return None
+
+
+def buscar_portada(titulo, artista):
+    """URL de la portada del álbum (iTunes y, si no, Deezer). None si no la encuentra."""
+    for fuente in (_portada_itunes, _portada_deezer):
+        try:
+            url = fuente(titulo, artista)
+            if url and url.startswith("https://") and len(url) <= MAX_URL_IMAGEN:
+                return url
+        except (requests.RequestException, ValueError, AttributeError, TypeError):
+            continue
+    return None
+
+
 def recortar(texto, limite=120):
     """Discord acepta entre 2 y 128 caracteres."""
     texto = (texto or "").strip()
@@ -132,6 +194,7 @@ class Reproductor:
             return {
                 "titulo": props.title,
                 "artista": props.artist,
+                "album": getattr(props, "album_title", "") or "",
                 "duracion": timeline.end_time.total_seconds(),
                 "posicion": max(posicion, 0.0),
                 "sonando": sonando,
@@ -208,8 +271,19 @@ class Discord:
             self.ultimo_envio = time.monotonic()
             return False
 
-    def mostrar(self, linea, titulo, artista, lista_miembros):
+    def mostrar(self, linea, titulo, artista, lista_miembros,
+                portada=None, album="", inicio=None, fin=None):
         extra = {"status_display_type": StatusDisplayType.DETAILS} if lista_miembros else {}
+        if inicio is not None and fin is not None and fin > inicio:
+            extra["start"], extra["end"] = int(inicio), int(fin)  # barra de progreso
+        if portada:
+            extra["large_image"] = portada
+            extra["large_text"] = recortar(album or titulo)
+            extra["small_image"] = ICONO_URL
+            extra["small_text"] = "Letras RPC"
+        else:
+            extra["large_image"] = ICONO_URL
+            extra["large_text"] = "Letras RPC"
         return self._enviar(lambda rpc: rpc.update(
             activity_type=ActivityType.LISTENING,
             details=recortar(linea),
@@ -232,6 +306,8 @@ def ejecutar(config, detener, reportar=None, reproductor=None):
     reportar = reportar or (lambda tipo, texto: print(f"[{tipo}] {texto}"))
     reproductor = reproductor or Reproductor()
     discord = Discord(str(config["client_id"]).strip(), detener, reportar)
+    buscador = ThreadPoolExecutor(max_workers=2)
+    portadas = {}  # (titulo, artista) -> URL o None
 
     try:
         if not discord.conectar():
@@ -262,12 +338,18 @@ def ejecutar(config, detener, reportar=None, reproductor=None):
                 reportar("estado", "Mostrando letra en Discord")
                 avisado_pausa = False
 
-            # Cambió la canción -> buscar letra
+            # Cambió la canción -> buscar letra y portada a la vez
             tema = (estado["titulo"], estado["artista"])
             if tema != tema_actual:
                 tema_actual = tema
                 reportar("tema", f"{tema[0]} — {tema[1]}")
-                letra = buscar_letra(tema[0], tema[1], estado["duracion"])
+                f_letra = buscador.submit(buscar_letra, tema[0], tema[1], estado["duracion"])
+                if tema not in portadas:
+                    f_portada = buscador.submit(buscar_portada, *tema)
+                    portadas[tema] = f_portada.result()
+                    if len(portadas) > 200:  # que el caché no crezca sin límite
+                        portadas.pop(next(iter(portadas)))
+                letra = f_letra.result()
                 if not (letra and letra[0]):
                     letra = None
                     reportar("estado", "Esta canción no tiene letra sincronizada")
@@ -279,15 +361,21 @@ def ejecutar(config, detener, reportar=None, reproductor=None):
             else:
                 linea = "(sin letra sincronizada)"
 
-            clave = (tema, linea)
+            portada = portadas.get(tema) if config.get("portada", True) else None
+            clave = (tema, linea, portada)
             if clave != mostrada and discord.puede_enviar():
-                if discord.mostrar(linea, *tema, bool(config.get("lista_miembros", True))):
+                inicio = time.time() - estado["posicion"]
+                fin = inicio + estado["duracion"] if estado["duracion"] > 0 else None
+                if discord.mostrar(linea, *tema, bool(config.get("lista_miembros", True)),
+                                   portada=portada, album=estado.get("album", ""),
+                                   inicio=inicio, fin=fin):
                     mostrada = clave
                     reportar("linea", linea)
 
             detener.wait(POLL_SEG)
     finally:
         # Al cerrar la conexión, Discord borra la presencia solo: no hace falta otro envío.
+        buscador.shutdown(wait=False)
         discord.cerrar()
         reproductor.cerrar()
         reportar("estado", "Apagado")

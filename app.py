@@ -209,8 +209,10 @@ class App:
                  font=(fuente, 8), bg=PANEL, fg=TENUE).pack(anchor="w")
 
         self.var_miembros = tk.BooleanVar(value=bool(self.config.get("lista_miembros", True)))
+        self.var_portada = tk.BooleanVar(value=bool(self.config.get("portada", True)))
         self.var_auto = tk.BooleanVar(value=bool(self.config.get("auto_prender", False)))
         self.var_inicio = tk.BooleanVar(value=inicio_con_windows())
+        self._check(opc, "Mostrar la portada del álbum", self.var_portada, self._opciones)
         self._check(opc, "Mostrar la letra en la lista de miembros del server", self.var_miembros, self._opciones)
         self._check(opc, "Prender automáticamente al abrir", self.var_auto, self._opciones)
         self._check(opc, "Abrir con Windows", self.var_inicio, self._cambiar_inicio)
@@ -262,6 +264,7 @@ class App:
         except (tk.TclError, ValueError):
             pass
         self.config["lista_miembros"] = self.var_miembros.get()
+        self.config["portada"] = self.var_portada.get()
         self.config["auto_prender"] = self.var_auto.get()
         guardar_config(self.config)
 
