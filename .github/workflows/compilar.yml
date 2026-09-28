@@ -1,0 +1,65 @@
+name: Compilar .exe
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar dependencias
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller
+
+      - name: Compilar con PyInstaller
+        run: >
+          pyinstaller --noconfirm --onefile --windowed
+          --name LetrasRPC
+          --icon assets/icono.ico
+          --add-data "assets/icono.ico;assets"
+          --collect-all winrt
+          --hidden-import winrt.windows.media.control
+          --hidden-import winrt.windows.foundation
+          --hidden-import winrt.windows.foundation.collections
+          app.py
+
+      - name: Probar que el .exe arranque
+        timeout-minutes: 3
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath .\dist\LetrasRPC.exe -ArgumentList "--autotest" -Wait -PassThru
+          if (Test-Path autotest_error.txt) { Get-Content autotest_error.txt }
+          if ($p.ExitCode -ne 0) { throw "El autotest falló (código $($p.ExitCode))" }
+          Write-Host "Autotest OK"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LetrasRPC
+          path: dist/LetrasRPC.exe
+
+      - name: Publicar release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/LetrasRPC.exe
+          generate_release_notes: true
+          body: |
+            ## 🎤 Descargá `LetrasRPC.exe`, abrilo y listo
+
+            No hace falta instalar Python ni nada más.
+
+            > Si Windows muestra "Windows protegió su PC", tocá **Más información → Ejecutar de todas formas**. Aparece porque el programa no está firmado, no porque tenga algo malo. El código está completo en este repo.

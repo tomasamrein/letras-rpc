@@ -1,5 +1,5 @@
 """
-Letras RPC
+Letras RPC — motor
 Muestra en tu perfil de Discord (Rich Presence) la línea de letra
 que está sonando en Spotify, sincronizada.
 
@@ -7,6 +7,10 @@ que está sonando en Spotify, sincronizada.
 - Busca la letra sincronizada en LRCLIB (gratis, sin clave).
 - Usa Rich Presence oficial (IPC local + tu propia app de Discord). NO usa tu token.
 - Todas las llamadas a Discord (update y clear) pasan por un limitador de frecuencia.
+
+Se puede usar de dos formas:
+- Con ventana: ejecutá `app.py` (o el .exe).
+- Por consola: `python letras_rpc.py` con la variable LETRAS_RPC_CLIENT_ID.
 """
 
 import asyncio
@@ -14,33 +18,32 @@ import bisect
 import os
 import re
 import sys
+import threading
 import time
 from datetime import datetime, timezone
 
 import requests
 from pypresence import ActivityType, Presence, StatusDisplayType
-from winrt.windows.media.control import (
-    GlobalSystemMediaTransportControlsSessionManager as SessionManager,
-    GlobalSystemMediaTransportControlsSessionPlaybackStatus as PlaybackStatus,
-)
 
-# ---------------- CONFIGURACIÓN ----------------
-# Application ID de tu app en https://discord.com/developers/applications
-# (New Application -> General Information -> Application ID).
-CLIENT_ID = os.environ.get("LETRAS_RPC_CLIENT_ID", "PEGA_ACA_TU_APPLICATION_ID")
+__version__ = "1.2.0"
 
-MIN_SEGUNDOS_ENTRE_UPDATES = 5   # Discord permite ~5 cambios cada 20 s. No bajar de 5.
-OFFSET_LETRA_SEG = 0.0           # positivo = letra más adelantada, negativo = más atrasada
-POLL_SEG = 1.0                   # cada cuánto se mira el reproductor (es local, no llama a Discord)
-LETRA_EN_LISTA_DE_MIEMBROS = True  # True: en la lista de miembros se ve "Escuchando <letra>"
-# -----------------------------------------------
+# ---------------- VALORES POR DEFECTO ----------------
+MIN_SEGUNDOS_ENTRE_UPDATES = 5  # Discord permite ~5 cambios cada 20 s. Nunca menos de 5.
+POLL_SEG = 1.0                  # cada cuánto se mira el reproductor (local, no llama a Discord)
+
+CONFIG_POR_DEFECTO = {
+    "client_id": "",
+    "offset": 0.0,               # positivo = letra más adelantada, negativo = más atrasada
+    "lista_miembros": True,      # True: en la lista de miembros se ve "Escuchando <letra>"
+}
+# -----------------------------------------------------
 
 LRC_LINE = re.compile(r"\[(\d+):(\d+(?:\.\d+)?)\]\s*(.*)")
-USER_AGENT = "LetrasRPC/1.1 (https://github.com/lrclib/lrclib)"
+USER_AGENT = f"LetrasRPC/{__version__} (https://github.com/tomasamrein/letras-rpc)"
 SIN_LINEA = "♪ ♪"  # Discord exige al menos 2 caracteres en details/state
 
-_winrt_loop = asyncio.new_event_loop()
 
+# ---------------------------------------------------------------- letras
 
 def parsear_lrc(texto):
     """Devuelve (tiempos, lineas) ordenados. tiempos en segundos."""
@@ -85,41 +88,9 @@ def buscar_letra(titulo, artista, duracion):
             for item in r.json():
                 if item.get("syncedLyrics"):
                     return parsear_lrc(item["syncedLyrics"])
-    except (requests.RequestException, ValueError) as e:
-        print(f"[letra] error: {e}")
+    except (requests.RequestException, ValueError):
+        pass
     return None
-
-
-async def _leer_reproductor():
-    manager = await SessionManager.request_async()
-    for sesion in manager.get_sessions():
-        if "spotify" not in (sesion.source_app_user_model_id or "").lower():
-            continue
-        props = await sesion.try_get_media_properties_async()
-        timeline = sesion.get_timeline_properties()
-        sonando = sesion.get_playback_info().playback_status == PlaybackStatus.PLAYING
-
-        posicion = timeline.position.total_seconds()
-        if sonando:
-            ahora = datetime.now(timezone.utc)
-            posicion += (ahora - timeline.last_updated_time).total_seconds()
-
-        return {
-            "titulo": props.title,
-            "artista": props.artist,
-            "duracion": timeline.end_time.total_seconds(),
-            "posicion": max(posicion, 0.0),
-            "sonando": sonando,
-        }
-    return None
-
-
-def leer_reproductor():
-    try:
-        return _winrt_loop.run_until_complete(_leer_reproductor())
-    except Exception as e:  # el reproductor puede fallar un instante al cambiar de tema
-        print(f"[reproductor] {e}")
-        return None
 
 
 def recortar(texto, limite=120):
@@ -130,27 +101,87 @@ def recortar(texto, limite=120):
     return texto if len(texto) <= limite else texto[: limite - 1] + "…"
 
 
+# ---------------------------------------------------------------- reproductor (Windows)
+
+class Reproductor:
+    """Lee qué suena en Spotify desde los controles multimedia de Windows."""
+
+    def __init__(self):
+        from winrt.windows.media.control import (
+            GlobalSystemMediaTransportControlsSessionManager as SessionManager,
+            GlobalSystemMediaTransportControlsSessionPlaybackStatus as PlaybackStatus,
+        )
+        self._SessionManager = SessionManager
+        self._PLAYING = PlaybackStatus.PLAYING
+        self._loop = asyncio.new_event_loop()
+
+    async def _leer(self):
+        manager = await self._SessionManager.request_async()
+        for sesion in manager.get_sessions():
+            if "spotify" not in (sesion.source_app_user_model_id or "").lower():
+                continue
+            props = await sesion.try_get_media_properties_async()
+            timeline = sesion.get_timeline_properties()
+            sonando = sesion.get_playback_info().playback_status == self._PLAYING
+
+            posicion = timeline.position.total_seconds()
+            if sonando:
+                ahora = datetime.now(timezone.utc)
+                posicion += (ahora - timeline.last_updated_time).total_seconds()
+
+            return {
+                "titulo": props.title,
+                "artista": props.artist,
+                "duracion": timeline.end_time.total_seconds(),
+                "posicion": max(posicion, 0.0),
+                "sonando": sonando,
+            }
+        return None
+
+    def leer(self):
+        try:
+            return self._loop.run_until_complete(self._leer())
+        except Exception:  # puede fallar un instante al cambiar de tema
+            return None
+
+    def cerrar(self):
+        try:
+            self._loop.close()
+        except Exception:
+            pass
+
+
+# ---------------------------------------------------------------- Discord
+
 class Discord:
     """Envuelve pypresence: limita la frecuencia de TODAS las llamadas y reconecta con espera."""
 
-    def __init__(self, client_id):
+    def __init__(self, client_id, detener, reportar):
         self.client_id = client_id
+        self.detener = detener
+        self.reportar = reportar
         self.rpc = None
         self.ultimo_envio = 0.0
-        self.conectar()
 
     def conectar(self):
+        """Intenta conectar hasta lograrlo o hasta que pidan detener. Devuelve True si conectó."""
         espera = 10
-        while True:
+        while not self.detener.is_set():
             try:
                 self.rpc = Presence(self.client_id)
                 self.rpc.connect()
-                print("[discord] conectado")
-                return
+                self.reportar("estado", "Conectado a Discord")
+                return True
             except Exception as e:
-                print(f"[discord] no se pudo conectar ({e}). ¿Está Discord abierto? Reintento en {espera} s...")
-                time.sleep(espera)
+                self.cerrar()
+                texto = str(e) or e.__class__.__name__
+                if "Client ID" in texto or "invalid" in texto.lower():
+                    self.reportar("error", "Discord rechazó el Application ID. Revisá que esté bien copiado.")
+                else:
+                    self.reportar("error", f"No encuentro Discord abierto. Reintento en {espera} s…")
+                self.detener.wait(espera)
                 espera = min(espera * 2, 60)
+        return False
 
     def cerrar(self):
         try:
@@ -165,22 +196,20 @@ class Discord:
 
     def _enviar(self, accion):
         """Ejecuta una llamada a Discord. Devuelve True si salió bien."""
-        self.ultimo_envio = time.monotonic()  # cuenta aunque falle, para no reintentar en ráfaga
+        self.ultimo_envio = time.monotonic()  # cuenta aunque falle: nunca hay ráfagas
         try:
             accion(self.rpc)
             return True
-        except Exception as e:
-            print(f"[discord] error: {e}. Reconecto...")
+        except Exception:
+            self.reportar("error", "Se perdió la conexión con Discord. Reconectando…")
             self.cerrar()
-            time.sleep(MIN_SEGUNDOS_ENTRE_UPDATES)
+            self.detener.wait(MIN_SEGUNDOS_ENTRE_UPDATES)
             self.conectar()
             self.ultimo_envio = time.monotonic()
             return False
 
-    def mostrar(self, linea, titulo, artista):
-        extra = {}
-        if LETRA_EN_LISTA_DE_MIEMBROS:
-            extra["status_display_type"] = StatusDisplayType.DETAILS
+    def mostrar(self, linea, titulo, artista, lista_miembros):
+        extra = {"status_display_type": StatusDisplayType.DETAILS} if lista_miembros else {}
         return self._enviar(lambda rpc: rpc.update(
             activity_type=ActivityType.LISTENING,
             details=recortar(linea),
@@ -192,55 +221,93 @@ class Discord:
         return self._enviar(lambda rpc: rpc.clear())
 
 
-def main():
-    if not sys.platform.startswith("win"):
-        sys.exit("Este programa lee el reproductor de Windows. Solo funciona en Windows.")
-    if not CLIENT_ID.isdigit():
-        sys.exit("Falta el Application ID: editá CLIENT_ID en el script o usá LETRAS_RPC_CLIENT_ID.")
+# ---------------------------------------------------------------- bucle principal
 
-    discord = Discord(CLIENT_ID)
+def ejecutar(config, detener, reportar=None, reproductor=None):
+    """
+    Corre hasta que `detener` (threading.Event) se active.
+    `config` se relee en cada vuelta, así que offset y lista_miembros se pueden cambiar en vivo.
+    `reportar(tipo, texto)` recibe: "estado", "tema", "linea", "error".
+    """
+    reportar = reportar or (lambda tipo, texto: print(f"[{tipo}] {texto}"))
+    reproductor = reproductor or Reproductor()
+    discord = Discord(str(config["client_id"]).strip(), detener, reportar)
 
-    tema_actual = None   # (titulo, artista)
-    letra = None         # (tiempos, lineas) o None
-    mostrada = None      # última línea enviada a Discord (None = nada mostrado)
-
-    print("Listo. Poné música en Spotify. Ctrl+C para salir.")
     try:
-        while True:
-            estado = leer_reproductor()
+        if not discord.conectar():
+            return
 
-            # Nada sonando o en pausa -> limpiar presencia (respetando el limitador)
+        tema_actual = None   # (titulo, artista)
+        letra = None         # (tiempos, lineas) o None
+        mostrada = None      # lo último enviado a Discord (None = nada mostrado)
+        avisado_pausa = False
+
+        reportar("estado", "Esperando música en Spotify…")
+        while not detener.is_set():
+            estado = reproductor.leer()
+
+            # Nada sonando o en pausa -> ocultar presencia (respetando el limitador)
             if not estado or not estado["sonando"] or not estado["titulo"]:
+                if not avisado_pausa:
+                    reportar("estado", "Spotify en pausa o cerrado")
+                    reportar("linea", "")
+                    avisado_pausa = True
                 if mostrada is not None and discord.puede_enviar():
                     if discord.limpiar():
                         mostrada = None
-                time.sleep(POLL_SEG)
+                detener.wait(POLL_SEG)
                 continue
+
+            if avisado_pausa:
+                reportar("estado", "Mostrando letra en Discord")
+                avisado_pausa = False
 
             # Cambió la canción -> buscar letra
             tema = (estado["titulo"], estado["artista"])
             if tema != tema_actual:
                 tema_actual = tema
-                print(f"[tema] {tema[0]} - {tema[1]}")
+                reportar("tema", f"{tema[0]} — {tema[1]}")
                 letra = buscar_letra(tema[0], tema[1], estado["duracion"])
-                print("[letra] encontrada" if letra and letra[0] else "[letra] no encontrada")
+                if not (letra and letra[0]):
+                    letra = None
+                    reportar("estado", "Esta canción no tiene letra sincronizada")
+                else:
+                    reportar("estado", "Mostrando letra en Discord")
 
-            if letra and letra[0]:
-                linea = linea_actual(letra, estado["posicion"] + OFFSET_LETRA_SEG)
+            if letra:
+                linea = linea_actual(letra, estado["posicion"] + float(config.get("offset", 0.0)))
             else:
                 linea = "(sin letra sincronizada)"
 
             clave = (tema, linea)
             if clave != mostrada and discord.puede_enviar():
-                if discord.mostrar(linea, *tema):
+                if discord.mostrar(linea, *tema, bool(config.get("lista_miembros", True))):
                     mostrada = clave
+                    reportar("linea", linea)
 
-            time.sleep(POLL_SEG)
-    except KeyboardInterrupt:
-        print("\nChau!")
+            detener.wait(POLL_SEG)
     finally:
         # Al cerrar la conexión, Discord borra la presencia solo: no hace falta otro envío.
         discord.cerrar()
+        reproductor.cerrar()
+        reportar("estado", "Apagado")
+
+
+def main():
+    if not sys.platform.startswith("win"):
+        sys.exit("Este programa lee el reproductor de Windows. Solo funciona en Windows.")
+    client_id = os.environ.get("LETRAS_RPC_CLIENT_ID", "").strip()
+    if not client_id.isdigit():
+        sys.exit("Falta el Application ID: usá la variable LETRAS_RPC_CLIENT_ID o abrí app.py.")
+
+    config = dict(CONFIG_POR_DEFECTO, client_id=client_id)
+    detener = threading.Event()
+    print("Ctrl+C para salir.")
+    try:
+        ejecutar(config, detener)
+    except KeyboardInterrupt:
+        detener.set()
+        print("\nChau!")
 
 
 if __name__ == "__main__":

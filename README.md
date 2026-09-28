@@ -1,18 +1,22 @@
 <div align="center">
 
-# 🎤 Letras RPC
+<img src="assets/icono.png" width="110" alt="Ícono de Letras RPC">
+
+# Letras RPC
 
 **Mostrá en tu perfil de Discord la letra de lo que estás escuchando en Spotify, línea por línea.**
 
-![Python](https://img.shields.io/badge/Python-3.10+-3776AB?style=for-the-badge&logo=python&logoColor=white)
-![Discord](https://img.shields.io/badge/Discord-Rich%20Presence-5865F2?style=for-the-badge&logo=discord&logoColor=white)
-![Spotify](https://img.shields.io/badge/Spotify-Letras%20sincronizadas-1DB954?style=for-the-badge&logo=spotify&logoColor=white)
-![Windows](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D6?style=for-the-badge&logo=windows&logoColor=white)
+[![Descargar](https://img.shields.io/github/v/release/tomasamrein/letras-rpc?label=Descargar%20.exe&style=for-the-badge&logo=windows&logoColor=white&color=5865F2)](https://github.com/tomasamrein/letras-rpc/releases/latest)
+[![Compilación](https://img.shields.io/github/actions/workflow/status/tomasamrein/letras-rpc/compilar.yml?style=for-the-badge&label=compilaci%C3%B3n&logo=githubactions&logoColor=white)](https://github.com/tomasamrein/letras-rpc/actions)
 
+![Discord](https://img.shields.io/badge/Discord-Rich%20Presence-5865F2?style=flat-square&logo=discord&logoColor=white)
+![Spotify](https://img.shields.io/badge/Spotify-letras%20sincronizadas-1DB954?style=flat-square&logo=spotify&logoColor=white)
+![Windows](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D6?style=flat-square&logo=windows&logoColor=white)
 ![Sin token](https://img.shields.io/badge/token%20de%20Discord-NO%20se%20usa-success?style=flat-square)
-![Rate limit](https://img.shields.io/badge/rate%20limit-respetado-success?style=flat-square)
 ![Idioma](https://img.shields.io/badge/hecho%20en-espa%C3%B1ol-blueviolet?style=flat-square)
 ![Licencia](https://img.shields.io/badge/licencia-MIT-lightgrey?style=flat-square)
+
+<img src="assets/captura.png" width="420" alt="Ventana de Letras RPC">
 
 </div>
 
@@ -20,18 +24,61 @@
 
 ## ✨ ¿Qué hace?
 
-Mientras escuchás música en Spotify, tu perfil de Discord muestra el verso que está sonando en ese momento:
+Mientras escuchás música en Spotify, tu perfil de Discord muestra el verso que está sonando:
 
 ```
-🎧 Escuchando Letras RPC
+🎧 Escuchando Letras
    Y aunque el tiempo pase, sigo acá cantando
    Nombre del tema · Artista
 ```
 
-- 🎶 **Letra sincronizada** con el segundo exacto de la canción.
-- 👥 **Visible en la lista de miembros** del server (opcional).
-- ⏸️ **Se oculta sola** cuando pausás o cerrás Spotify.
-- 🔒 **Seguro para tu cuenta:** no usa tu token ni modifica Discord.
+- 🎶 **Letra sincronizada** con el segundo exacto de la canción
+- 🖱️ **Ventana simple**: pegás tu ID, tocás **Prender** y listo
+- 👥 **Visible en la lista de miembros** del server (opcional)
+- ⏸️ **Se oculta sola** cuando pausás o cerrás Spotify
+- 🚀 **Opción para abrirse con Windows**, minimizado y ya prendido
+- 🔒 **Seguro para tu cuenta**: no usa tu token ni modifica Discord
+
+---
+
+## 🚀 Empezar en 3 pasos
+
+### 1. Descargá el programa
+
+👉 **[Descargar LetrasRPC.exe](https://github.com/tomasamrein/letras-rpc/releases/latest)**
+
+Es un solo archivo. No hace falta instalar Python ni nada más.
+
+> [!NOTE]
+> Si Windows muestra **"Windows protegió su PC"**, tocá **Más información → Ejecutar de todas formas**. Aparece porque el programa no está firmado digitalmente (el certificado cuesta caro), no porque tenga algo malo. Todo el código está en este repo, y el `.exe` se compila automáticamente desde acá con GitHub Actions.
+
+### 2. Conseguí tu Application ID (2 minutos, una sola vez)
+
+1. Entrá a **[discord.com/developers/applications](https://discord.com/developers/applications)** con tu cuenta de Discord.
+2. Tocá **New Application**. El nombre que elijas es lo que aparece como *"Escuchando **ese nombre**"*. Por ejemplo: `Letras`, `🎤 Karaoke` o `lo que suena`.
+3. En **General Information**, copiá el **Application ID**.
+
+> En la ventana también está el link **¿De dónde lo saco?**, que te lleva directo.
+
+### 3. Pegalo y prendelo
+
+Abrí **LetrasRPC.exe**, pegá el ID y tocá **▶ Prender**. Con Discord y Spotify abiertos, la letra aparece en tu perfil. 🎤
+
+> [!TIP]
+> En Discord, activá **Configuración → Privacidad de actividad → Compartir tu actividad**. Si no, nadie más va a ver la letra.
+
+---
+
+## 🎛️ Opciones de la ventana
+
+| Opción | Qué hace |
+|---|---|
+| **Sincronía de la letra** | Si la letra va atrasada, subilo (`+0.5`, `+1`…). Si va adelantada, bajalo. Se aplica en vivo. |
+| **Mostrar la letra en la lista de miembros** | En la lista del server se ve *"Escuchando «la letra»"* en vez del nombre de la app. |
+| **Prender automáticamente al abrir** | No hace falta tocar **Prender** cada vez. |
+| **Abrir con Windows** | Arranca minimizado y ya prendido al encender la PC. |
+
+La configuración se guarda en `%APPDATA%\LetrasRPC\config.json`.
 
 ---
 
@@ -40,20 +87,20 @@ Mientras escuchás música en Spotify, tu perfil de Discord muestra el verso que
 ```mermaid
 flowchart LR
     A[🎵 Spotify] -->|tema y segundo actual| B[🪟 Controles multimedia de Windows]
-    B --> C[🐍 letras_rpc.py]
-    D[📜 LRCLIB] -->|letra sincronizada .lrc| C
+    B --> C[🎤 Letras RPC]
+    D[📜 LRCLIB] -->|letra sincronizada| C
     C -->|Rich Presence oficial<br/>máx. 1 cambio cada 5 s| E[💬 Tu perfil de Discord]
 ```
 
 1. **Lee Spotify desde Windows.** Usa los mismos controles multimedia que aparecen al subir el volumen, así que no hace falta login ni API de Spotify.
 2. **Busca la letra en [LRCLIB](https://lrclib.net).** Es una base de datos gratuita y abierta de letras con marcas de tiempo.
-3. **Actualiza tu Rich Presence.** Se conecta al Discord que tenés abierto mediante la vía oficial (IPC local) y con tu propia aplicación.
+3. **Actualiza tu Rich Presence.** Se conecta al Discord que tenés abierto por la vía oficial (IPC local), usando tu propia aplicación.
 
 ---
 
 ## 🛡️ ¿Me pueden banear?
 
-**No.** Este programa usa solo la vía que Discord ofrece para esto:
+**No.** Letras RPC usa solo la vía que Discord ofrece para esto:
 
 | | Letras RPC | Self-bots / plugins de estado |
 |---|:---:|:---:|
@@ -65,117 +112,41 @@ flowchart LR
 
 **Protecciones incluidas:**
 
-- ⏱️ Nunca manda más de **un cambio cada 5 segundos** (Discord permite 5 cada 20 s). Esto aplica también al ocultar la presencia cuando pausás.
-- 🔁 Si Discord rechaza algo, **no reintenta en ráfaga**: espera y reconecta con tiempos crecientes (10 s → 20 s → 40 s → 60 s).
-- 📏 Recorta los textos al largo permitido por Discord (entre 2 y 128 caracteres).
+- ⏱️ **Nunca manda más de un cambio cada 5 segundos** (Discord permite 5 cada 20 s). Esto aplica también al ocultar la presencia cuando pausás.
+- 🔁 **Si algo falla, no reintenta en ráfaga.** Espera y reconecta con tiempos crecientes (10 → 20 → 40 → 60 s).
+- 🪟 **Una sola instancia.** Si ya está abierto, no deja abrir otro, para que no se dupliquen los envíos.
+- 📏 **Textos recortados** al largo que acepta Discord (entre 2 y 128 caracteres).
 
 > [!NOTE]
-> Por ese límite, en canciones muy rápidas (rap, por ejemplo) se van a saltear algunas líneas. Es una limitación de Discord, no del programa.
-
----
-
-## 📦 Instalación
-
-### 1. Requisitos
-
-- 🪟 Windows 10 u 11
-- 🐍 [Python 3.10 o superior](https://www.python.org/downloads/): al instalarlo, marcá **"Add Python to PATH"**
-- 🎧 La app de escritorio de Spotify
-- 💬 La app de escritorio de Discord (en el navegador no funciona Rich Presence)
-
-### 2. Descargá el proyecto
-
-```bash
-git clone https://github.com/tomasamrein/letras-rpc.git
-cd letras-rpc
-```
-
-O usá **Code → Download ZIP** y descomprimilo.
-
-### 3. Instalá las dependencias
-
-```bash
-pip install -r requirements.txt
-```
-
-### 4. Creá tu app de Discord (2 minutos)
-
-1. Entrá a **[discord.com/developers/applications](https://discord.com/developers/applications)**.
-2. Tocá **New Application**. El nombre que elijas es el que va a aparecer como *"Escuchando **ese nombre**"*. Por ejemplo: `Letras`, `🎤 Karaoke` o `lo que suena`.
-3. En **General Information**, copiá el **Application ID**.
-4. *(Opcional)* En **Rich Presence → Art Assets** podés subir una imagen.
-
-### 5. Pegá tu Application ID
-
-Abrí `letras_rpc.py` y reemplazá esta línea:
-
-```python
-CLIENT_ID = os.environ.get("LETRAS_RPC_CLIENT_ID", "PEGA_ACA_TU_APPLICATION_ID")
-```
-
-por:
-
-```python
-CLIENT_ID = os.environ.get("LETRAS_RPC_CLIENT_ID", "123456789012345678")
-```
-
-### 6. ¡A cantar! 🎤
-
-Con Discord y Spotify abiertos, ejecutá esto:
-
-```bash
-python letras_rpc.py
-```
-
-Deberías ver:
-
-```
-[discord] conectado
-Listo. Poné música en Spotify. Ctrl+C para salir.
-[tema] Nombre del tema - Artista
-[letra] encontrada
-```
-
-> [!TIP]
-> En Discord, entrá a **Configuración → Privacidad de actividad** y activá **"Compartir tu actividad"**. Si no, nadie más va a ver la letra.
-
----
-
-## ⚙️ Configuración
-
-Todo se ajusta al principio de `letras_rpc.py`:
-
-| Opción | Por defecto | Para qué sirve |
-|---|:---:|---|
-| `CLIENT_ID` | — | El ID de tu app de Discord. **Obligatorio.** |
-| `MIN_SEGUNDOS_ENTRE_UPDATES` | `5` | Tiempo mínimo entre cambios. ⚠️ **No bajar de 5.** |
-| `OFFSET_LETRA_SEG` | `0.0` | Adelanta (`+`) o atrasa (`-`) la letra si la ves desfasada. |
-| `POLL_SEG` | `1.0` | Cada cuánto mira qué suena (es local, no llama a Discord). |
-| `LETRA_EN_LISTA_DE_MIEMBROS` | `True` | Muestra la letra también en la lista de miembros del server. |
+> Por ese límite, en canciones muy rápidas (rap, por ejemplo) se saltean algunas líneas. Es una limitación de Discord, no del programa.
 
 ---
 
 ## ❓ Preguntas frecuentes
 
 <details>
-<summary><b>Dice "(sin letra sincronizada)"</b></summary>
+<summary><b>Dice "Esta canción no tiene letra sincronizada"</b></summary>
 
-LRCLIB no tiene esa canción con marcas de tiempo. Pasa con temas muy nuevos o poco conocidos. Si querés, podés [subir la letra a LRCLIB](https://lrclib.net) para que le sirva a todos.
+LRCLIB no tiene ese tema con marcas de tiempo. Pasa con canciones muy nuevas o poco conocidas. Si querés, podés [subir la letra a LRCLIB](https://lrclib.net) para que le sirva a todos.
 </details>
 
 <details>
-<summary><b>La letra va adelantada o atrasada</b></summary>
+<summary><b>Dice "No encuentro Discord abierto"</b></summary>
 
-Ajustá `OFFSET_LETRA_SEG`. Por ejemplo, `1.0` la adelanta un segundo y `-1.0` la atrasa un segundo.
+- Abrí **Discord de escritorio**. El del navegador no soporta Rich Presence.
+- Si igual no conecta, cerrá Discord del todo (también desde el ícono junto al reloj) y volvé a abrirlo.
 </details>
 
 <details>
-<summary><b>No aparece nada en mi perfil</b></summary>
+<summary><b>Dice "Discord rechazó el Application ID"</b></summary>
 
-- Revisá que estés usando **Discord de escritorio**, no el navegador.
-- Activá **Configuración → Privacidad de actividad → Compartir tu actividad**.
-- Revisá que el `CLIENT_ID` sea el número correcto.
-- Cerrá y volvé a abrir Discord con el programa corriendo.
+Copiá de nuevo el **Application ID** desde *General Information*. Es un número de ~19 dígitos. No es el *Public Key* ni el *Client Secret*.
+</details>
+
+<details>
+<summary><b>Dice "Spotify en pausa o cerrado" pero estoy escuchando</b></summary>
+
+Tiene que ser la **app de escritorio de Spotify**, no el reproductor web.
 </details>
 
 <details>
@@ -185,15 +156,46 @@ Sí, Discord puede mostrar varias actividades. Si querés que se vea solo la let
 </details>
 
 <details>
+<summary><b>El antivirus lo marca como sospechoso</b></summary>
+
+Es un falso positivo común con los programas Python empaquetados en `.exe`. El código es abierto y se compila automáticamente en GitHub. Si preferís, podés correrlo desde el código (más abajo).
+</details>
+
+<details>
 <summary><b>¿Funciona en Mac o Linux?</b></summary>
 
 Por ahora no. Lee la música desde los controles multimedia de Windows.
 </details>
 
-<details>
-<summary><b>¿Puedo hacer que arranque solo con Windows?</b></summary>
+---
 
-Sí. Apretá <kbd>Win</kbd> + <kbd>R</kbd>, escribí `shell:startup` y creá ahí un acceso directo a este comando: `pythonw letras_rpc.py`. `pythonw` lo corre sin mostrar ventana.
+## 🧑‍💻 Correrlo desde el código
+
+Para quien prefiera no usar el `.exe`:
+
+```bash
+git clone https://github.com/tomasamrein/letras-rpc.git
+cd letras-rpc
+python -m pip install -r requirements.txt
+python app.py
+```
+
+También se puede usar sin ventana, desde la consola:
+
+```powershell
+$env:LETRAS_RPC_CLIENT_ID = "TU_APPLICATION_ID"
+python letras_rpc.py
+```
+
+<details>
+<summary><b>Compilar el .exe vos mismo</b></summary>
+
+```bash
+pip install pyinstaller
+pyinstaller --onefile --windowed --name LetrasRPC --icon assets/icono.ico --add-data "assets/icono.ico;assets" --collect-all winrt app.py
+```
+
+El `.exe` queda en `dist/`. Cada vez que se sube un tag `v*` al repo, GitHub Actions lo compila y lo publica solo en [Releases](https://github.com/tomasamrein/letras-rpc/releases).
 </details>
 
 ---
@@ -202,10 +204,11 @@ Sí. Apretá <kbd>Win</kbd> + <kbd>R</kbd>, escribí `shell:startup` y creá ah�
 
 ```
 letras-rpc/
-├── letras_rpc.py      # el programa
-├── requirements.txt   # dependencias de Python
-├── README.md          # esto que estás leyendo
-└── LICENSE            # MIT
+├── app.py                        # la ventana
+├── letras_rpc.py                 # el motor (Spotify → LRCLIB → Discord)
+├── requirements.txt              # dependencias de Python
+├── assets/                       # ícono y captura
+└── .github/workflows/compilar.yml  # compila el .exe automáticamente
 ```
 
 ---
